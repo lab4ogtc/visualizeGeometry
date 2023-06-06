@@ -49,6 +49,28 @@ istream &operator>>(istream &in, TranslationVector &t) {
   return in;
 }
 
+struct EulerAngleVector {
+  bool edited = false;
+  Vector3d trans = Vector3d(0, 0, 0);
+};
+
+constexpr double radian2degree = 180.0 / M_PI;
+constexpr double degree2radian = M_PI / 180.0;
+ostream &operator<<(ostream &out, const EulerAngleVector &e) {
+  out << "=[" << e.trans(0) * radian2degree << ',' << e.trans(1) * radian2degree << ',' << e.trans(2) * radian2degree << "]";
+  return out;
+}
+
+istream &operator>>(istream &in, EulerAngleVector &e) {
+  std::string input;
+  std::getline(in, input);
+  auto data = e.trans.data();
+  sscanf(input.c_str(), "=[%lf,%lf,%lf]", &data[0], &data[1], &data[2]);
+  std::cout << "Override EulerAngleVector with [" << data[0] << "," << data[1] << "," << data[2] << "]" << std::endl;
+  e.edited = true;
+  return in;
+}
+
 struct QuaternionDraw {
   bool edited = false;
   Quaterniond q;
@@ -110,7 +132,7 @@ int main(int argc, char **argv) {
   // ui
   pangolin::Var<RotationMatrix> rotation_matrix("ui.R", RotationMatrix());
   pangolin::Var<TranslationVector> translation_vector("ui.t", TranslationVector());
-  pangolin::Var<TranslationVector> euler_angles("ui.rpy", TranslationVector());
+  pangolin::Var<EulerAngleVector> euler_angles("ui.euler", EulerAngleVector());
   pangolin::Var<QuaternionDraw> quaternion("ui.q", QuaternionDraw());
   pangolin::Var<RotationVector> rotation_vector("ui.rv", RotationVector());
   pangolin::Var<QuaternionDraw> quaternion_lh("ui.q_lh", QuaternionDraw());
@@ -145,6 +167,19 @@ int main(int argc, char **argv) {
       std::cout << "OnDrawUpdate RotationVector with [" << angle << "," << data[0] << "," << data[1] << "," << data[2] << "]" << std::endl;
     }
 
+    auto& edit_rpy = euler_angles.Get();
+    if (edit_rpy.edited) {
+      pangolin::OpenGlMatrix& m = s_cam.GetModelViewMatrix();
+      Matrix3d R = (AngleAxisd(edit_rpy.trans[2] * degree2radian, Vector3d::UnitZ())
+                  * AngleAxisd(edit_rpy.trans[1] * degree2radian, Vector3d::UnitY())
+                  * AngleAxisd(edit_rpy.trans[0] * degree2radian, Vector3d::UnitX())).toRotationMatrix();
+      for (int i = 0; i < 3; i++)
+        for (int j = 0; j < 3; j++)
+          m(j, i) = R(i, j);
+
+      std::cout << "OnDrawUpdate EulerAngleVector with [" << edit_rpy.trans[0] << "," << edit_rpy.trans[1] << "," << edit_rpy.trans[2] << "]" << std::endl;
+    }
+
     auto& edit_t = translation_vector.Get();
     if (edit_t.edited) {
       pangolin::OpenGlMatrix& m = s_cam.GetModelViewMatrix();
@@ -177,7 +212,7 @@ int main(int argc, char **argv) {
     t.trans = -R.matrix * t.trans;
     translation_vector = t;
 
-    TranslationVector euler;
+    EulerAngleVector euler;
     euler.trans = R.matrix.eulerAngles(2, 1, 0);
     euler_angles = euler;
 
